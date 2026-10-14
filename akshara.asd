@@ -26,7 +26,9 @@
   :license "MIT"
   :encoding :utf-8
   :depends-on ("akshara" "cl-pdf")
-  :components ((:file "outlines")))
+  :serial t
+  :components ((:file "cl-pdf-glyphs")
+               (:file "outlines")))
 
 (defsystem "akshara/test"
   :description "The golden tests: (asdf:test-system \"akshara\")."

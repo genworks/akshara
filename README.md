@@ -86,19 +86,38 @@ configurations are what is missing.
 ### Onto a page
 
 The system `akshara/pdf` (needs
-[cl-pdf](https://github.com/mbattyani/cl-pdf)) draws shaped glyphs as
-filled outlines, TrueType quadratics as cubic Béziers in the content
-stream:
+[cl-pdf](https://github.com/mbattyani/cl-pdf)) puts shaped text on a
+page two ways.
+
+As real text, in a glyph-indexed font.  `cl-pdf-glyphs.lisp` adds to
+cl-pdf what it lacks: `pdf:load-glyph-font` embeds a TrueType font as
+a Type0 font whose two-byte codes are glyph ids (CIDToGIDMap
+Identity, widths by glyph, a ToUnicode map for the glyphs the cmap
+names), and `pdf:show-glyphs` shows glyph ids in it.  On top of that,
+`show-shaped-glyphs` shows a shaped line: TJ arrays whose numbers
+correct the viewer's advances to the shaper's, each mark placed by
+its offset, and, given the source string, an ActualText span per
+cluster so the logical text copies and searches out of the PDF
+whatever order the glyphs are in.
+
+```lisp
+(pdf:load-glyph-font "fonts/NotoSerifDevanagari-SemiBold.ttf")
+(let ((pdf-font (pdf:get-font "NotoSerifDevanagari-SemiBold-GID")))
+  (pdf:in-text-mode
+    (akshara:show-shaped-text font line x y 12 pdf-font)))
+```
+
+As outlines: `draw-shaped-glyphs` and `draw-shaped-text` fill each
+glyph's TrueType contours, quadratics as cubic Béziers, through
+cl-pdf's path calls.  That prints exactly, embeds no font and is not
+text; it is how the shaping was first proved on a page.
 
 ```lisp
 (akshara:draw-shaped-glyphs font (akshara:shape font line) x y 12)
-(akshara:draw-shaped-text font line x y 12)
 ```
 
-The result prints exactly and embeds no font; it is not selectable
-text.  Real text needs the PDF to carry the TrueType font and show
-glyph indices, which is a change to cl-pdf's font embedding rather
-than to this library.
+The cl-pdf additions are new definitions in its package, nothing
+redefined, written against cl-pdf 20231021 and meant to go upstream.
 
 ## Tests
 
@@ -130,4 +149,5 @@ Bengali SemiBold 3.000, under the SIL Open Font License (`fonts/OFL-*`).
 | `unicode.lisp` | Indic categories and positions, marks, decompositions |
 | `indic.lisp` | syllables, initial and final reordering, masks |
 | `shape.lisp` | the plan and the pipeline |
-| `outlines.lisp` | `akshara/pdf`: outlines through cl-pdf |
+| `cl-pdf-glyphs.lisp` | `akshara/pdf`: the glyph-indexed font and `show-glyphs`, additions to cl-pdf |
+| `outlines.lisp` | `akshara/pdf`: shaped text as real text or as outlines through cl-pdf |
