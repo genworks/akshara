@@ -1,13 +1,15 @@
 ;; Copyright (c) 2026 David Cooper
 ;; SPDX-License-Identifier: MIT
 
-;;; The Unicode facts the shaper needs about Devanagari and Bengali:
-;;; the Indic syllabic category and position of each character (as
-;;; HarfBuzz classifies them: C, V, N, H, M, SM, Ra, Symbol ...), which
-;;; characters are marks, and the canonical decompositions the
-;;; normalizer applies.  Tables are written out by hand from
-;;; IndicSyllabicCategory.txt and IndicPositionalCategory.txt for the
-;;; two blocks, so the library carries no Unicode database.
+;;; The Unicode facts the shaper needs about Devanagari, Bengali,
+;;; Tamil and Telugu: the Indic syllabic category and position of each
+;;; character (as HarfBuzz classifies them: C, V, N, H, M, SM, Ra,
+;;; Symbol ...), which characters are marks, their combining classes,
+;;; and the canonical decompositions the normalizer applies.  Tables
+;;; are written out by hand from IndicSyllabicCategory.txt and
+;;; IndicPositionalCategory.txt for the four blocks, checked against
+;;; HarfBuzz's generated hb-ot-shaper-indic-table.cc, so the library
+;;; carries no Unicode database.
 
 (in-package #:akshara)
 
@@ -73,6 +75,33 @@
     (#x09F0 #x09F1 :c nil)
     (#x09FC #x09FC :placeholder nil)
     (#x09FE #x09FE :sm :above)
+    ;; Tamil.  U+0B83 (aytham) and U+0BD0 (om) are X to HarfBuzz; the
+    ;; two-part vowel signs U+0BCA-0BCC are decomposed before they reach
+    ;; the table, their position being that of their right part.
+    (#x0B82 #x0B82 :sm :above)
+    (#x0B85 #x0B8A :v nil) (#x0B8E #x0B90 :v nil) (#x0B92 #x0B94 :v nil)
+    (#x0B95 #x0B95 :c nil) (#x0B99 #x0B9A :c nil) (#x0B9C #x0B9C :c nil) (#x0B9E #x0B9F :c nil)
+    (#x0BA3 #x0BA4 :c nil) (#x0BA8 #x0BAA :c nil) (#x0BAE #x0BB9 :c nil)
+    (#x0BBE #x0BBF :m :post) (#x0BC0 #x0BC0 :m :above) (#x0BC1 #x0BC2 :m :below)
+    (#x0BC6 #x0BC8 :m :pre) (#x0BCA #x0BCC :m :post)
+    (#x0BCD #x0BCD :h nil)
+    (#x0BD7 #x0BD7 :m :post)
+    (#x0BE6 #x0BEF :placeholder nil)
+    ;; Telugu.  U+0C3C is the nukta Unicode 14 added; U+0C55 and U+0C56
+    ;; are the length marks, the second the right part of U+0C48.
+    (#x0C00 #x0C00 :sm :above) (#x0C01 #x0C03 :sm :post) (#x0C04 #x0C04 :sm :above)
+    (#x0C05 #x0C0C :v nil) (#x0C0E #x0C10 :v nil) (#x0C12 #x0C14 :v nil)
+    (#x0C15 #x0C28 :c nil) (#x0C2A #x0C39 :c nil)
+    (#x0C3C #x0C3C :n nil)
+    (#x0C3D #x0C3D :symbol nil)
+    (#x0C3E #x0C40 :m :above) (#x0C41 #x0C44 :m :post)
+    (#x0C46 #x0C48 :m :above) (#x0C4A #x0C4C :m :above)
+    (#x0C4D #x0C4D :h nil)
+    (#x0C55 #x0C55 :m :above) (#x0C56 #x0C56 :m :below)
+    (#x0C58 #x0C5A :c nil) (#x0C5D #x0C5D :c nil)
+    (#x0C60 #x0C61 :v nil)
+    (#x0C62 #x0C63 :m :below)
+    (#x0C66 #x0C6F :placeholder nil)
     ;; Shared
     (#x0020 #x0020 :placeholder nil) (#x00A0 #x00A0 :placeholder nil) (#x00D7 #x00D7 :placeholder nil)
     (#x200C #x200C :zwnj nil) (#x200D #x200D :zwj nil)
@@ -80,7 +109,7 @@
     (#x25CC #x25CC :dottedcircle nil) (#x25FB #x25FE :placeholder nil)))
 
 (defun ra-p (code)
-  (member code '(#x0930 #x09B0 #x09F0)))
+  (member code '(#x0930 #x09B0 #x09F0 #x0BB0 #x0C30)))
 
 (defun indic-category (code)
   "The HarfBuzz Indic category of CODE and, for a matra, which side of
@@ -90,14 +119,25 @@ the consonant it is written on."
           do (return (values (if (and (eq cat :c) (ra-p code)) :ra cat) side))
         finally (return (values :x nil))))
 
-(defun matra-position (script side)
-  "Where a matra of SIDE sorts within a syllable of SCRIPT (HarfBuzz's
-matra_position_indic)."
+(defun matra-position (script side code)
+  "Where the matra CODE, written on SIDE of its consonant, sorts within
+a syllable of SCRIPT: the matra_pos_right/top/bottom rules of
+HarfBuzz's gen-indic-table.py.  Telugu puts every vowel sign before
+the subjoined consonants except the two vocalic signs U+0C43 and
+U+0C44, which follow them."
   (ecase side
     (:pre +pos-pre-m+)
-    (:post (ecase script (:devanagari +pos-after-sub+) (:bengali +pos-after-post+)))
-    (:above +pos-after-sub+)
-    (:below +pos-after-sub+)))
+    (:post (ecase script
+             (:devanagari +pos-after-sub+)
+             ((:bengali :tamil) +pos-after-post+)
+             (:telugu (if (<= code #x0C42) +pos-before-sub+ +pos-after-sub+))))
+    (:above (ecase script
+              ((:devanagari :bengali :tamil) +pos-after-sub+)
+              (:telugu +pos-before-sub+)))
+    (:below (ecase script
+              ((:devanagari :bengali) +pos-after-sub+)
+              (:tamil +pos-after-post+)
+              (:telugu +pos-before-sub+)))))
 
 (defparameter +consonant-categories+ '(:c :cs :ra :cm :v :placeholder :dottedcircle))
 
@@ -106,7 +146,7 @@ matra_position_indic)."
   (multiple-value-bind (cat side) (indic-category code)
     (values cat
             (cond ((member cat +consonant-categories+) +pos-base-c+)
-                  ((eq cat :m) (matra-position script side))
+                  ((eq cat :m) (matra-position script side code))
                   ((member cat '(:sm :a :symbol)) +pos-smvd+)
                   (t +pos-end+)))))
 
@@ -117,6 +157,9 @@ matra_position_indic)."
     #x0900 #x0903 #x093A #x093C #x093E #x094F #x0951 #x0957 #x0962 #x0963
     #x0981 #x0983 #x09BC #x09BC #x09BE #x09C4 #x09C7 #x09C8 #x09CB #x09CD #x09D7 #x09D7
     #x09E2 #x09E3 #x09FE #x09FE
+    #x0B82 #x0B82 #x0BBE #x0BC2 #x0BC6 #x0BC8 #x0BCA #x0BCD #x0BD7 #x0BD7
+    #x0C00 #x0C04 #x0C3C #x0C3C #x0C3E #x0C44 #x0C46 #x0C48 #x0C4A #x0C4D #x0C55 #x0C56
+    #x0C62 #x0C63
     #x1CD0 #x1CD2 #x1CD4 #x1CE8 #x1CED #x1CED #x1CF4 #x1CF4 #x1CF8 #x1CF9
     #xA8E0 #xA8F1 #xA8FF #xA8FF
     #xFE00 #xFE0F))
@@ -126,10 +169,23 @@ matra_position_indic)."
 the scripts this library covers."
   (in-ranges-p code *mark-ranges*))
 
+(defparameter *default-ignorable-ranges*
+  '(#x00AD #x00AD #x034F #x034F #x061C #x061C #x115F #x1160 #x17B4 #x17B5
+    #x180B #x180F #x200B #x200F #x202A #x202E #x2060 #x206F #x3164 #x3164
+    #xFE00 #xFE0F #xFEFF #xFEFF #xFFA0 #xFFA0 #xFFF0 #xFFF8))
+
+(defun default-ignorable-code-p (code)
+  "Whether CODE is a Default_Ignorable_Code_Point in the BMP, as
+HarfBuzz's is_default_ignorable: the joiners, the zero-width spaces,
+the soft hyphen, the variation selectors and the other format
+characters a shaper hides."
+  (in-ranges-p code *default-ignorable-ranges*))
+
 (defun continuation-p (code)
   "Whether CODE continues the grapheme of the character before it, as
-HarfBuzz forms clusters: marks and the joiners."
-  (or (unicode-mark-p code) (<= #x200C code #x200D)))
+HarfBuzz forms clusters: marks and ZWJ.  ZWNJ is kept a cluster of its
+own, as HarfBuzz's hb_set_unicode_props says, for finer clusters."
+  (or (unicode-mark-p code) (= code #x200D)))
 
 (defun letter-or-mark-p (code)
   "Whether CODE's general category lies in Format..Nonspacing_Mark:
@@ -139,10 +195,13 @@ a letter, a mark or a format character."
       (and (< code char-code-limit) (alpha-char-p (code-char code)))))
 
 (defun combining-class (code)
-  "The canonical combining class: nukta 7, virama 9, everything else 0."
+  "The canonical combining class: the nuktas 7, the viramas 9, the two
+Telugu length marks 84 and 91, everything else 0."
   (case code
-    ((#x093C #x09BC) 7)
-    ((#x094D #x09CD) 9)
+    ((#x093C #x09BC #x0C3C) 7)
+    ((#x094D #x09CD #x0BCD #x0C4D) 9)
+    (#x0C55 84)
+    (#x0C56 91)
     (t 0)))
 
 ;;; --- normalization ---------------------------------------------------------
@@ -153,14 +212,18 @@ a letter, a mark or a format character."
     (#x095B #x091C #x093C) (#x095C #x0921 #x093C) (#x095D #x0922 #x093C)
     (#x095E #x092B #x093C) (#x095F #x092F #x093C)
     (#x09CB #x09C7 #x09BE) (#x09CC #x09C7 #x09D7)
-    (#x09DF #x09AF #x09BC))
-  "Canonical decompositions in the two blocks, less the three HarfBuzz
-keeps whole (U+0931, U+09DC, U+09DD).")
+    (#x09DF #x09AF #x09BC)
+    (#x0BCA #x0BC6 #x0BBE) (#x0BCB #x0BC7 #x0BBE) (#x0BCC #x0BC6 #x0BD7)
+    (#x0C48 #x0C46 #x0C56))
+  "Canonical decompositions in the four blocks, less the four HarfBuzz
+keeps whole (U+0931, U+09DC, U+09DD, U+0B94): the nukta letters and
+the two-part vowel signs of Bengali, Tamil and Telugu.")
 
 (defparameter *compositions*
   '((#x0928 #x093C #x0929) (#x0930 #x093C #x0931) (#x0933 #x093C #x0934))
   "The pairs that recompose: canonical compositions not on the
-exclusion list, and never a mark with a mark.")
+exclusion list, and never a mark with a mark, which is why no two-part
+vowel sign recomposes and Tamil and Telugu have no entries.")
 
 (defun decompose-code (code)
   (cdr (assoc code *decompositions*)))

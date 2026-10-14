@@ -30,7 +30,10 @@
 
 (defun zwnj-p (g) (= (gi-codepoint g) #x200C))
 (defun zwj-p (g) (= (gi-codepoint g) #x200D))
-(defun default-ignorable-p (g) (<= #x200C (gi-codepoint g) #x200D))
+(defun default-ignorable-p (g)
+  "HarfBuzz's is_default_ignorable: a default-ignorable character that
+no substitution has touched."
+  (and (not (gi-substituted-p g)) (default-ignorable-code-p (gi-codepoint g))))
 
 ;;; --- glyph properties against lookup flags -------------------------------
 

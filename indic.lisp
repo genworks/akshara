@@ -4,9 +4,10 @@
 ;;; The Indic shaper: syllables, the reordering before and after the
 ;;; basic shaping features, and the per-glyph feature masks.  A port of
 ;;; the algorithm in HarfBuzz's hb-ot-shaper-indic.cc, which itself
-;;; follows Microsoft's Devanagari/Bengali OpenType shaping
-;;; specifications, kept close enough that the two agree glyph for
-;;; glyph on the fonts in the test corpus.
+;;; follows Microsoft's Indic OpenType shaping specifications, kept
+;;; close enough that the two agree glyph for glyph on the fonts in the
+;;; test corpus.  The per-script differences live in `*indic-configs*'
+;;; and in two places in the code that name Tamil, as HarfBuzz does.
 
 (in-package #:akshara)
 
@@ -14,11 +15,17 @@
   script
   virama
   reph-pos                              ; :after-main :before-sub :after-sub :before-post :after-post
+  reph-mode                             ; :implicit (Ra,H is a reph) or :explicit (only Ra,H,ZWJ)
   blwf-mode)                            ; :pre-and-post or :post-only
 
 (defparameter *indic-configs*
-  (list (%make-indic-config :script :devanagari :virama #x094D :reph-pos :before-post :blwf-mode :pre-and-post)
-        (%make-indic-config :script :bengali :virama #x09CD :reph-pos :after-sub :blwf-mode :pre-and-post)))
+  (list (%make-indic-config :script :devanagari :virama #x094D :reph-pos :before-post :reph-mode :implicit :blwf-mode :pre-and-post)
+        (%make-indic-config :script :bengali :virama #x09CD :reph-pos :after-sub :reph-mode :implicit :blwf-mode :pre-and-post)
+        (%make-indic-config :script :tamil :virama #x0BCD :reph-pos :after-post :reph-mode :implicit :blwf-mode :pre-and-post)
+        (%make-indic-config :script :telugu :virama #x0C4D :reph-pos :after-post :reph-mode :explicit :blwf-mode :post-only))
+  "HarfBuzz's indic_configs for the scripts covered.  Telugu forms a
+reph only from Ra, Halant, ZWJ and applies 'blwf' after the base
+alone; Tamil and Telugu put the reph after the post-base forms.")
 
 (defun indic-config (script)
   (find script *indic-configs* :key #'indic-config-script))
@@ -29,7 +36,7 @@
 
 (defstruct (plan (:constructor %make-plan))
   font
-  script                                ; :devanagari :bengali or NIL (the default shaper)
+  script                                ; :devanagari :bengali :tamil :telugu or NIL (the default shaper)
   config                                ; indic-config or NIL
   gsub-langsys
   gpos-langsys
@@ -49,9 +56,14 @@ for a per-glyph one, 0 when the font lacks it."
     (and lt (mapcar (lambda (i) (aref (lt-lookups lt) i))
                     (langsys-feature-lookups lt (plan-gsub-langsys plan) tag)))))
 
-(defun consonant-p (g) (member (gi-category g) +consonant-categories+))
-(defun joiner-p (g) (member (gi-category g) '(:zwj :zwnj)))
-(defun halant-p (g) (eq (gi-category g) :h))
+(defun one-of-p (g categories)
+  "HarfBuzz's is_one_of: whether G's category is among CATEGORIES,
+which no glyph that ligated is, since all bets are off then."
+  (and (not (gi-ligated-p g)) (member (gi-category g) categories)))
+
+(defun consonant-p (g) (one-of-p g +consonant-categories+))
+(defun joiner-p (g) (one-of-p g '(:zwj :zwnj)))
+(defun halant-p (g) (one-of-p g '(:h)))
 
 ;;; --- syllables -------------------------------------------------------------
 ;;;
@@ -197,15 +209,26 @@ post-base form, or the base position when it forms neither."
          (mask-blwf (plan-feature-mask plan "blwf"))
          (mask-abvf (plan-feature-mask plan "abvf"))
          (mask-pstf (plan-feature-mask plan "pstf"))
+         (mask-pref (plan-feature-mask plan "pref"))
+         (explicit-reph (eq (indic-config-reph-mode config) :explicit))
          (base end)
          (has-reph nil))
     (flet ((info (i) (aref buf i)))
       ;; 1. Find the base consonant.
       (let ((limit start))
+        ;; If the syllable starts with Ra + Halant (Ra + Halant + ZWJ
+        ;; where the reph is explicit) and has more than one consonant,
+        ;; Ra is excluded from the candidates for base.
         (when (and (/= mask-rphf 0)
                    (<= (+ start 3) end)
-                   (not (joiner-p (info (+ start 2))))
-                   (would-substitute-p plan "rphf" (list (gi-gid (info start)) (gi-gid (info (1+ start))))))
+                   (if explicit-reph
+                       (eq (gi-category (info (+ start 2))) :zwj)
+                       (not (joiner-p (info (+ start 2)))))
+                   (let ((ra (gi-gid (info start)))
+                         (h (gi-gid (info (1+ start)))))
+                     (or (would-substitute-p plan "rphf" (list ra h))
+                         (and explicit-reph
+                              (would-substitute-p plan "rphf" (list ra h (gi-gid (info (+ start 2)))))))))
           (incf limit 2)
           (loop while (and (< limit end) (joiner-p (info limit))) do (incf limit))
           (setf base start has-reph t))
@@ -221,7 +244,10 @@ post-base form, or the base position when it forms neither."
                      (return))
                    (when (= (gi-position (info i)) +pos-below-c+) (setf seen-below t))
                    (setf base i))
-                  ((and (< start i) (eq (gi-category (info i)) :zwj) (halant-p (info (1- i))))
+                  ;; A ZWJ after a Halant stops the base search and asks
+                  ;; for an explicit half form; a ZWJ before a Halant asks
+                  ;; for a subjoined form, and the search goes on.
+                  ((and (< start i) (eq (gi-category (info i)) :zwj) (eq (gi-category (info (1- i))) :h))
                    (return)))
             (unless (> i limit) (return))))
         ;; Ra + Halant with no other consonant: Ra is the base, not a reph.
@@ -238,7 +264,7 @@ post-base form, or the base position when it forms neither."
               do (let ((g (info i)))
                    (cond ((member (gi-category g) '(:zwj :zwnj :n :rs :cm :h))
                           (setf (gi-position g) last-pos)
-                          (when (and (halant-p g) (= (gi-position g) +pos-pre-m+))
+                          (when (and (eq (gi-category g) :h) (= (gi-position g) +pos-pre-m+))
                             ;; Uniscribe doesn't move the Halant with a left matra.
                             (loop for j from i above start
                                   when (/= (gi-position (info (1- j))) +pos-pre-m+)
@@ -257,9 +283,10 @@ post-base form, or the base position when it forms neither."
                               when (< (gi-position (info j)) +pos-smvd+)
                                 do (setf (gi-position (info j)) (gi-position (info i))))
                         (setf last i))
-                       ((eq (gi-category (info i)) :m) (setf last i)))))
+                       ((member (gi-category (info i)) '(:m :mpst)) (setf last i)))))
       ;; Sort the syllable by position, stably, and merge the clusters
-      ;; of what moved.
+      ;; of what moved.  ORIG tracks where each glyph came from, as
+      ;; HarfBuzz does in the syllable field.
       (let* ((n (- end start))
              (orig (make-array n))
              (items (loop for i from start below end collect (cons (- i start) (info i)))))
@@ -268,7 +295,7 @@ post-base form, or the base position when it forms neither."
               for i from start
               do (setf (aref buf i) (cdr item)
                        (aref orig (- i start)) (car item)))
-        ;; Find base again, and the left-matra range.
+        ;; Find base again, and flip the left-matra sequence.
         (let ((first-left end) (last-left end))
           (setf base end)
           (loop for i from start below end
@@ -277,11 +304,17 @@ post-base form, or the base position when it forms neither."
                           (when (= first-left end) (setf first-left i))
                           (setf last-left i))))
           (when (< first-left last-left)
-            (buffer-reverse-range buf first-left (1+ last-left))
-            (let ((sub (subseq orig (- first-left start) (- (1+ last-left) start))))
-              (loop for i from (- first-left start)
-                    for o across (nreverse sub)
-                    do (setf (aref orig i) o)))))
+            (flet ((reverse-both (from to)
+                     (buffer-reverse-range buf from to)
+                     (replace orig (nreverse (subseq orig (- from start) (- to start)))
+                              :start1 (- from start))))
+              (reverse-both first-left (1+ last-left))
+              ;; Reverse back the nuktas and the like riding with each matra.
+              (let ((i first-left))
+                (loop for j from first-left to last-left
+                      when (member (gi-category (info j)) '(:m :mpst))
+                        do (reverse-both i (1+ j))
+                           (setf i (1+ j)))))))
         (let ((b (if (< base end) base start)))
           (loop for i from b below end
                 do (let ((o (aref orig (- i start))))
@@ -304,6 +337,14 @@ post-base form, or the base position when it forms neither."
       (let ((mask (logior mask-blwf mask-abvf mask-pstf)))
         (loop for i from (1+ base) below end
               do (setf (gi-mask (info i)) (logior (gi-mask (info i)) mask))))
+      ;; A Halant, Ra after the base that the font would turn into a
+      ;; pre-base-reordering form gets the 'pref' mask.
+      (when (and (/= mask-pref 0) (< (+ base 2) end))
+        (loop for i from (1+ base) below (1- end)
+              when (would-substitute-p plan "pref" (list (gi-gid (info i)) (gi-gid (info (1+ i)))))
+                do (setf (gi-mask (info i)) (logior (gi-mask (info i)) mask-pref)
+                         (gi-mask (info (1+ i))) (logior (gi-mask (info (1+ i))) mask-pref))
+                   (return)))
       ;; ZWJ and ZWNJ effects: a ZWNJ disables the half form before it.
       (loop for i from (1+ start) below end
             when (joiner-p (info i))
@@ -319,8 +360,7 @@ post-base form, or the base position when it forms neither."
 
 (defun final-reordering (plan buf)
   (map-syllables (lambda (start end)
-                   (unless (eq (gi-syllable-type (aref buf start)) :non-indic-cluster)
-                     (final-reordering-syllable plan buf start end)))
+                   (final-reordering-syllable plan buf start end))
                  buf))
 
 (defun final-reordering-syllable (plan buf start end)
@@ -329,8 +369,14 @@ post-base form, or the base position when it forms neither."
          (mask-pref (plan-feature-mask plan "pref"))
          (mask-init (plan-feature-mask plan "init"))
          (try-pref (/= mask-pref 0))
+         ;; Malayalam and Tamil have no half forms or explicit virama
+         ;; forms: what 'half' makes there are chillus or ligated
+         ;; viramas, and a matra goes after them, so no searching back
+         ;; for a halant in those scripts.
+         (search-halant (not (member (plan-script plan) '(:tamil :malayalam))))
          (base start))
-    (flet ((info (i) (aref buf i)))
+    (flet ((info (i) (aref buf i))
+           (one-of (i categories) (one-of-p (aref buf i) categories)))
       ;; A virama that was ligated and multiplied lost its class; give it back.
       (when (and virama (plusp virama))
         (loop for i from start below end
@@ -345,28 +391,38 @@ post-base form, or the base position when it forms neither."
                    (loop for i from (1+ base) below end
                          when (logtest (gi-mask (info i)) mask-pref)
                            do (unless (and (gi-substituted-p (info i)) (gi-ligated-and-didnt-multiply-p (info i)))
+                                ;; A 'pref' candidate that formed nothing: the base is around here.
                                 (setf base i)
                                 (loop while (and (< base end) (halant-p (info base))) do (incf base))
                                 (when (< base end) (setf (gi-position (info base)) +pos-base-c+))
                                 (setf try-pref nil))
-                              (return)))
+                              (return))
+                   (when (= base end) (return)))
+                 (when (and (< start base) (> (gi-position (info base)) +pos-base-c+))
+                   (decf base))
                  (return))
                (incf base))
-      (when (and (= base end) (< start base) (eq (gi-category (info (1- base))) :zwj))
+      (when (and (= base end) (< start base) (one-of (1- base) '(:zwj)))
         (decf base))
       (when (< base end)
-        (loop while (and (< start base) (member (gi-category (info base)) '(:n :h)))
+        (loop while (and (< start base) (one-of base '(:n :h)))
               do (decf base)))
       ;; Reorder matras: a pre-base matra goes after the last standalone
-      ;; halant before the base.
+      ;; halant before the base, unless a ZWJ follows that halant, in
+      ;; which case the search goes on before it (HarfBuzz issue 1070).
       (when (and (< (1+ start) end) (< start base))
         (let ((new-pos (if (= base end) (- base 2) (1- base))))
-          (loop while (and (> new-pos start) (not (member (gi-category (info new-pos)) '(:m :h))))
-                do (decf new-pos))
-          (if (and (halant-p (info new-pos)) (/= (gi-position (info new-pos)) +pos-pre-m+))
-              (when (and (< (1+ new-pos) end) (eq (gi-category (info (1+ new-pos))) :zwj))
-                (incf new-pos))
-              (setf new-pos start))
+          (when search-halant
+            (loop
+              (loop while (and (> new-pos start) (not (one-of new-pos '(:m :mpst :h))))
+                    do (decf new-pos))
+              (cond ((and (halant-p (info new-pos)) (/= (gi-position (info new-pos)) +pos-pre-m+))
+                     (if (and (< (1+ new-pos) end)
+                              (eq (gi-category (info (1+ new-pos))) :zwj)
+                              (> new-pos start))
+                         (decf new-pos)
+                         (return)))
+                    (t (setf new-pos start) (return)))))
           (if (and (< start new-pos) (/= (gi-position (info new-pos)) +pos-pre-m+))
               (loop for i from new-pos above start
                     when (= (gi-position (info (1- i))) +pos-pre-m+)
@@ -417,13 +473,33 @@ post-base form, or the base position when it forms neither."
                 ;; A reph that would land after Matra,Halant goes before the halant.
                 (when (halant-p (info p))
                   (loop for i from (1+ base) below p
-                        when (eq (gi-category (info i)) :m)
+                        when (member (gi-category (info i)) '(:m :mpst))
                           do (decf p) (return)))
                 (setf new-reph-pos p))))
           (when (and new-reph-pos (> new-reph-pos start))
             (merge-clusters buf start (1+ new-reph-pos))
             (buffer-move buf start new-reph-pos)
             (when (and (< start base) (<= base new-reph-pos)) (decf base)))))
+      ;; Reorder a pre-base-reordering consonant: only one the 'pref'
+      ;; substitution formed, to the place a pre-base matra would take,
+      ;; or else right before the base.
+      (when (and try-pref (< (1+ base) end))
+        (loop for i from (1+ base) below end
+              when (logtest (gi-mask (info i)) mask-pref)
+                do (when (gi-ligated-and-didnt-multiply-p (info i))
+                     (let ((new-pos base))
+                       (when search-halant
+                         (loop while (and (> new-pos start) (not (one-of (1- new-pos) '(:m :mpst :h))))
+                               do (decf new-pos)))
+                       (when (and (> new-pos start) (halant-p (info (1- new-pos))))
+                         ;; A joiner after that halant: the position moves after it.
+                         (when (and (< new-pos end) (joiner-p (info new-pos)))
+                           (incf new-pos)))
+                       (let ((old-pos i))
+                         (merge-clusters buf new-pos (1+ old-pos))
+                         (buffer-move buf old-pos new-pos)
+                         (when (and (<= new-pos base) (< base old-pos)) (incf base)))))
+                   (return)))
       ;; 'init' on a left matra at the start of a word.
       (when (and (/= mask-init 0) (= (gi-position (info start)) +pos-pre-m+))
         (when (or (zerop start)

@@ -22,13 +22,22 @@
 (defparameter *indic-other-features*
   '("init" "pres" "abvs" "blws" "psts" "haln"))
 
-(defparameter *common-gsub-features* '("calt" "clig" "liga" "rclt" "rlig"))
+(defparameter *common-gsub-features* '("calt" "clig" "liga" "rclt" "rlig")
+  "HarfBuzz's common and horizontal GSUB features, one stage after the
+shaper's own.")
+
+(defparameter *indic-common-gsub-features* '("calt" "clig" "rclt" "rlig")
+  "The same for the Indic shaper, which turns 'liga' off.")
+
 (defparameter *gpos-features* '("abvm" "blwm" "mark" "mkmk" "curs" "dist" "kern"))
 
 (defun script-tags (script)
+  "The OpenType script tags tried for SCRIPT, the new-spec tag first."
   (ecase script
     (:devanagari '("dev2" "deva"))
     (:bengali '("bng2" "beng"))
+    (:tamil '("tml2" "taml"))
+    (:telugu '("tel2" "telu"))
     ((nil) '("DFLT" "dflt" "latn"))))
 
 (defun collect-stage (lt langsys features masks &key per-syllable (auto-joiners t))
@@ -46,6 +55,23 @@ index and merged where features share a lookup."
                         (list (aref (lt-lookups lt) i) mask per-syllable auto-joiners auto-joiners))))))))
     (let ((list (loop for e being the hash-values of entries collect e)))
       (sort list #'< :key (lambda (e) (lookup-index (first e)))))))
+
+(defun merge-stages (&rest entry-lists)
+  "One lookup list from several, as HarfBuzz compiles the features of
+a stage: sorted by lookup index, a lookup two features share appearing
+once with their masks or'd and the stricter joiner skipping of the two."
+  (let ((entries (make-hash-table)))
+    (dolist (list entry-lists)
+      (loop for (lookup mask per-syllable auto-zwnj auto-zwj) in list
+            do (let ((e (gethash (lookup-index lookup) entries)))
+                 (if e
+                     (setf (second e) (logior (second e) mask)
+                           (fourth e) (and (fourth e) auto-zwnj)
+                           (fifth e) (and (fifth e) auto-zwj))
+                     (setf (gethash (lookup-index lookup) entries)
+                           (list lookup mask per-syllable auto-zwnj auto-zwj))))))
+    (sort (loop for e being the hash-values of entries collect e)
+          #'< :key (lambda (e) (lookup-index (first e))))))
 
 (defun make-plan (font script &optional language)
   (let* ((plan (%make-plan :font font :script script :config (indic-config script)))
@@ -65,7 +91,8 @@ index and merged where features share a lookup."
              (when (and table (langsys-has-feature-p table langsys tag))
                (setf (gethash tag masks)
                      (or (cdr (assoc tag *non-global-masks* :test #'string=)) 1)))))
-      (dolist (tag (append '("locl" "ccmp") *indic-basic-features* *indic-other-features* *common-gsub-features*))
+      (dolist (tag (append '("locl" "ccmp") *indic-basic-features* *indic-other-features*
+                           (if (plan-config plan) *indic-common-gsub-features* *common-gsub-features*)))
         (note tag gsub (plan-gsub-langsys plan)))
       (dolist (tag *gpos-features*)
         (note tag gpos (plan-gpos-langsys plan))))
@@ -83,8 +110,8 @@ index and merged where features share a lookup."
                          for rest on *indic-basic-features*
                          collect (cons (collect-stage gsub ls (list tag) masks :per-syllable t :auto-joiners nil)
                                        (if (null (cdr rest)) #'final-reordering nil)))
-                   (list (cons (append (collect-stage gsub ls *indic-other-features* masks :per-syllable t :auto-joiners nil)
-                                       (collect-stage gsub ls *common-gsub-features* masks))
+                   (list (cons (merge-stages (collect-stage gsub ls *indic-other-features* masks :per-syllable t :auto-joiners nil)
+                                             (collect-stage gsub ls *indic-common-gsub-features* masks))
                                nil)))
                   (list (cons (collect-stage gsub ls (append '("locl" "ccmp") *common-gsub-features*) masks)
                               nil))))))
@@ -96,10 +123,14 @@ index and merged where features share a lookup."
 ;;; --- the buffer from the text ------------------------------------------------
 
 (defun guess-script (string)
+  "The script of the first character of STRING in a block the Indic
+shaper covers, or NIL."
   (loop for ch across string
         for code = (char-code ch)
         do (cond ((<= #x0900 code #x097F) (return :devanagari))
-                 ((<= #x0980 code #x09FF) (return :bengali)))
+                 ((<= #x0980 code #x09FF) (return :bengali))
+                 ((<= #x0B80 code #x0BFF) (return :tamil))
+                 ((<= #x0C00 code #x0C7F) (return :telugu)))
         finally (return nil)))
 
 (defun normalize-codes (font codes)
@@ -184,6 +215,13 @@ a list of (code . cluster); the result is the same."
                (decf (gi-y-offset g) (gi-y-advance g)))
              (setf (gi-x-advance g) 0 (gi-y-advance g) 0)))
 
+(defun zero-default-ignorable-advances (buf)
+  "HarfBuzz's hb_ot_zero_width_default_ignorables: the joiners and
+other default-ignorable characters no lookup consumed take no space."
+  (loop for g across buf
+        when (default-ignorable-p g)
+          do (setf (gi-x-advance g) 0 (gi-y-advance g) 0)))
+
 (defun propagate-attachment-offsets (buf)
   (let ((len (fill-pointer buf)))
     (labels ((propagate (i depth)
@@ -218,8 +256,8 @@ a list of (code . cluster); the result is the same."
 (defun shape (font string &key (script :guess) language)
   "Shape STRING with FONT: a vector of shaped-glyph, in visual order,
 advances and offsets in font units.  SCRIPT is :devanagari, :bengali,
-NIL for the default shaper, or :guess (from the text).  LANGUAGE is an
-OpenType language tag such as \"SAN \"."
+:tamil, :telugu, NIL for the default shaper, or :guess (from the
+text).  LANGUAGE is an OpenType language tag such as \"SAN \"."
   (let* ((script (if (eq script :guess) (guess-script string) script))
          (plan (make-plan font script language))
          (buf (make-buffer (max 16 (length string)))))
@@ -234,16 +272,23 @@ OpenType language tag such as \"SAN \"."
     (when (plan-gpos-lookups plan)
       (let ((c (%make-actx :font font :buffer buf :kind :gpos)))
         (run-stage c (plan-gpos-lookups plan))))
-    (zero-mark-widths font buf (null (plan-gpos-lookups plan)))
+    ;; The default shaper zeroes mark advances by GDEF class; the Indic
+    ;; shaper leaves them to the font (HarfBuzz's ZERO_WIDTH_MARKS_NONE),
+    ;; since some Indic fonts class their spacing matras as marks.
+    (unless (plan-config plan)
+      (zero-mark-widths font buf (null (plan-gpos-lookups plan))))
+    (zero-default-ignorable-advances buf)
     (propagate-attachment-offsets buf)
-    (let ((result (make-array (fill-pointer buf))))
-      (loop for g across buf
-            for i from 0
-            do (setf (aref result i)
-                     (make-shaped-glyph :gid (gi-gid g) :cluster (gi-cluster g)
-                                        :x-advance (gi-x-advance g) :y-advance (gi-y-advance g)
-                                        :x-offset (gi-x-offset g) :y-offset (gi-y-offset g))))
-      result)))
+    ;; Default ignorables are shown as the space glyph, or dropped when
+    ;; the font has none (HarfBuzz's hb_ot_hide_default_ignorables).
+    (let ((space (glyph-id font #x20)))
+      (coerce (loop for g across buf
+                    for hidden = (default-ignorable-p g)
+                    unless (and hidden (zerop space))
+                      collect (make-shaped-glyph :gid (if hidden space (gi-gid g)) :cluster (gi-cluster g)
+                                                 :x-advance (gi-x-advance g) :y-advance (gi-y-advance g)
+                                                 :x-offset (gi-x-offset g) :y-offset (gi-y-offset g)))
+              'vector))))
 
 (defun shaped-width (glyphs)
   "The total advance of a shaped line, in font units."
