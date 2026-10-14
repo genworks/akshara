@@ -1,0 +1,15 @@
+# compiled Lisp
+*.fasl
+*.fas
+*.lib
+*.lx64fsl
+*.dx64fsl
+*.wx64fsl
+*.sx64fsl
+*.x86f
+*.ufasl
+*.abcl
+bin/
+
+# written by Quicklisp's local-projects scan
+system-index.txt
