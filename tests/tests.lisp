@@ -18,12 +18,10 @@
 (in-package #:akshara-test)
 
 (defparameter *golden-directory*
-  (merge-pathnames "golden/" (make-pathname :name nil :type nil
-                                            :defaults (or *load-truename* *compile-file-truename*))))
+  (merge-pathnames "tests/golden/" (asdf:system-source-directory "akshara")))
 
 (defparameter *fonts-directory*
-  (merge-pathnames "../fonts/" (make-pathname :name nil :type nil
-                                              :defaults (or *load-truename* *compile-file-truename*))))
+  (merge-pathnames "fonts/" (asdf:system-source-directory "akshara")))
 
 (defparameter *corpora*
   '((:devanagari "deva" "NotoSerifDevanagari-SemiBold.ttf")
