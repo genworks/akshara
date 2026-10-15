@@ -4,8 +4,8 @@
 (defpackage #:akshara
   (:use #:common-lisp)
   (:documentation "OpenType shaping in Common Lisp: GSUB and GPOS read
-through zpb-ttf, an Indic shaper (Devanagari, Bengali, Tamil and
-Telugu), glyph ids with positions out.")
+through zpb-ttf, an Indic shaper (Devanagari, Bengali, Tamil, Telugu
+and Gujarati), glyph ids with positions out.")
   (:export #:load-font
            #:close-font
            #:with-font

@@ -2,14 +2,15 @@
 ;; SPDX-License-Identifier: MIT
 
 ;;; The Unicode facts the shaper needs about Devanagari, Bengali,
-;;; Tamil and Telugu: the Indic syllabic category and position of each
-;;; character (as HarfBuzz classifies them: C, V, N, H, M, SM, Ra,
-;;; Symbol ...), which characters are marks, their combining classes,
-;;; and the canonical decompositions the normalizer applies.  Tables
-;;; are written out by hand from IndicSyllabicCategory.txt and
-;;; IndicPositionalCategory.txt for the four blocks, checked against
-;;; HarfBuzz's generated hb-ot-shaper-indic-table.cc, so the library
-;;; carries no Unicode database.
+;;; Tamil, Telugu and Gujarati: the Indic syllabic category and
+;;; position of each character (as HarfBuzz classifies them: C, V, N,
+;;; H, M, SM, Ra, Symbol ...), which characters are marks, their
+;;; combining classes, and the canonical decompositions the normalizer
+;;; applies.  Tables are written out by hand from
+;;; IndicSyllabicCategory.txt and IndicPositionalCategory.txt for the
+;;; five blocks, checked against HarfBuzz's generated
+;;; hb-ot-shaper-indic-table.cc, so the library carries no Unicode
+;;; database.
 
 (in-package #:akshara)
 
@@ -102,6 +103,23 @@
     (#x0C60 #x0C61 :v nil)
     (#x0C62 #x0C63 :m :below)
     (#x0C66 #x0C6F :placeholder nil)
+    ;; Gujarati.  U+0AD0 (om) is X to HarfBuzz, as Devanagari's; U+0AF9
+    ;; is the letter zha; U+0AFA-0AFF are the cantillation marks and
+    ;; nuktas of Unicode 10, A and N as HarfBuzz's table has them.
+    (#x0A81 #x0A82 :sm :above) (#x0A83 #x0A83 :sm :post)
+    (#x0A85 #x0A8D :v nil) (#x0A8F #x0A91 :v nil) (#x0A93 #x0A94 :v nil)
+    (#x0A95 #x0AA8 :c nil) (#x0AAA #x0AB0 :c nil) (#x0AB2 #x0AB3 :c nil) (#x0AB5 #x0AB9 :c nil)
+    (#x0ABC #x0ABC :n nil)
+    (#x0ABD #x0ABD :symbol nil)
+    (#x0ABE #x0ABE :m :post) (#x0ABF #x0ABF :m :pre) (#x0AC0 #x0AC0 :m :post)
+    (#x0AC1 #x0AC4 :m :below) (#x0AC5 #x0AC5 :m :above) (#x0AC7 #x0AC8 :m :above)
+    (#x0AC9 #x0AC9 :m :post) (#x0ACB #x0ACC :m :post)
+    (#x0ACD #x0ACD :h nil)
+    (#x0AE0 #x0AE1 :v nil)
+    (#x0AE2 #x0AE3 :m :below)
+    (#x0AE6 #x0AEF :placeholder nil)
+    (#x0AF9 #x0AF9 :c nil)
+    (#x0AFA #x0AFA :a nil) (#x0AFB #x0AFB :n nil) (#x0AFC #x0AFC :a nil) (#x0AFD #x0AFF :n nil)
     ;; Shared
     (#x0020 #x0020 :placeholder nil) (#x00A0 #x00A0 :placeholder nil) (#x00D7 #x00D7 :placeholder nil)
     (#x200C #x200C :zwnj nil) (#x200D #x200D :zwj nil)
@@ -109,7 +127,7 @@
     (#x25CC #x25CC :dottedcircle nil) (#x25FB #x25FE :placeholder nil)))
 
 (defun ra-p (code)
-  (member code '(#x0930 #x09B0 #x09F0 #x0BB0 #x0C30)))
+  (member code '(#x0930 #x09B0 #x09F0 #x0AB0 #x0BB0 #x0C30)))
 
 (defun indic-category (code)
   "The HarfBuzz Indic category of CODE and, for a matra, which side of
@@ -124,19 +142,21 @@ the consonant it is written on."
 a syllable of SCRIPT: the matra_pos_right/top/bottom rules of
 HarfBuzz's gen-indic-table.py.  Telugu puts every vowel sign before
 the subjoined consonants except the two vocalic signs U+0C43 and
-U+0C44, which follow them."
+U+0C44, which follow them; Gujarati's right and bottom signs go after
+the post-base forms, its top signs after the subjoined ones, as
+Tamil's do."
   (ecase side
     (:pre +pos-pre-m+)
     (:post (ecase script
              (:devanagari +pos-after-sub+)
-             ((:bengali :tamil) +pos-after-post+)
+             ((:bengali :tamil :gujarati) +pos-after-post+)
              (:telugu (if (<= code #x0C42) +pos-before-sub+ +pos-after-sub+))))
     (:above (ecase script
-              ((:devanagari :bengali :tamil) +pos-after-sub+)
+              ((:devanagari :bengali :tamil :gujarati) +pos-after-sub+)
               (:telugu +pos-before-sub+)))
     (:below (ecase script
               ((:devanagari :bengali) +pos-after-sub+)
-              (:tamil +pos-after-post+)
+              ((:tamil :gujarati) +pos-after-post+)
               (:telugu +pos-before-sub+)))))
 
 (defparameter +consonant-categories+ '(:c :cs :ra :cm :v :placeholder :dottedcircle))
@@ -157,6 +177,8 @@ U+0C44, which follow them."
     #x0900 #x0903 #x093A #x093C #x093E #x094F #x0951 #x0957 #x0962 #x0963
     #x0981 #x0983 #x09BC #x09BC #x09BE #x09C4 #x09C7 #x09C8 #x09CB #x09CD #x09D7 #x09D7
     #x09E2 #x09E3 #x09FE #x09FE
+    #x0A81 #x0A83 #x0ABC #x0ABC #x0ABE #x0AC5 #x0AC7 #x0AC9 #x0ACB #x0ACD #x0AE2 #x0AE3
+    #x0AFA #x0AFF
     #x0B82 #x0B82 #x0BBE #x0BC2 #x0BC6 #x0BC8 #x0BCA #x0BCD #x0BD7 #x0BD7
     #x0C00 #x0C04 #x0C3C #x0C3C #x0C3E #x0C44 #x0C46 #x0C48 #x0C4A #x0C4D #x0C55 #x0C56
     #x0C62 #x0C63
@@ -196,10 +218,11 @@ a letter, a mark or a format character."
 
 (defun combining-class (code)
   "The canonical combining class: the nuktas 7, the viramas 9, the two
-Telugu length marks 84 and 91, everything else 0."
+Telugu length marks 84 and 91, everything else 0 (the Gujarati nukta
+marks U+0AFD-0AFF among them)."
   (case code
-    ((#x093C #x09BC #x0C3C) 7)
-    ((#x094D #x09CD #x0BCD #x0C4D) 9)
+    ((#x093C #x09BC #x0ABC #x0C3C) 7)
+    ((#x094D #x09CD #x0ACD #x0BCD #x0C4D) 9)
     (#x0C55 84)
     (#x0C56 91)
     (t 0)))
@@ -215,15 +238,17 @@ Telugu length marks 84 and 91, everything else 0."
     (#x09DF #x09AF #x09BC)
     (#x0BCA #x0BC6 #x0BBE) (#x0BCB #x0BC7 #x0BBE) (#x0BCC #x0BC6 #x0BD7)
     (#x0C48 #x0C46 #x0C56))
-  "Canonical decompositions in the four blocks, less the four HarfBuzz
+  "Canonical decompositions in the five blocks, less the four HarfBuzz
 keeps whole (U+0931, U+09DC, U+09DD, U+0B94): the nukta letters and
-the two-part vowel signs of Bengali, Tamil and Telugu.")
+the two-part vowel signs of Bengali, Tamil and Telugu.  Gujarati has
+none: no letter of the block decomposes, and U+0AC9 (candra o) is a
+single sign HarfBuzz leaves whole.")
 
 (defparameter *compositions*
   '((#x0928 #x093C #x0929) (#x0930 #x093C #x0931) (#x0933 #x093C #x0934))
   "The pairs that recompose: canonical compositions not on the
 exclusion list, and never a mark with a mark, which is why no two-part
-vowel sign recomposes and Tamil and Telugu have no entries.")
+vowel sign recomposes and Tamil, Telugu and Gujarati have no entries.")
 
 (defun decompose-code (code)
   (cdr (assoc code *decompositions*)))

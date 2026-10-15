@@ -1,10 +1,11 @@
 # akshara
 
 OpenType shaping in portable Common Lisp: a reader for the GSUB and
-GPOS tables, an Indic shaper for Devanagari, Bengali, Tamil and
-Telugu, and glyph ids with positions out, so a Lisp program can set
-those scripts correctly with nothing but the font file.  Named for the akṣara, the written
-syllable, which is the unit the shaper works in.
+GPOS tables, an Indic shaper for Devanagari, Bengali, Tamil, Telugu
+and Gujarati, and glyph ids with positions out, so a Lisp program can
+set those scripts correctly with nothing but the font file.  Named
+for the akṣara, the written syllable, which is the unit the shaper
+works in.
 
 ```lisp
 (akshara:with-font (font "fonts/NotoSerifDevanagari-SemiBold.ttf")
@@ -43,7 +44,7 @@ MIT license.
 
 The Indic shaper follows HarfBuzz's `hb-ot-shaper-indic.cc`, which in
 turn follows Microsoft's Indic OpenType specifications, for
-Devanagari, Bengali, Tamil and Telugu: syllables found by the same
+Devanagari, Bengali, Tamil, Telugu and Gujarati: syllables found by the same
 grammar, the base consonant found the same way (asking the font which
 consonants take below-base or post-base forms), the reph and the
 pre-base matra reordered in the same places, the basic features
@@ -58,24 +59,26 @@ glyph.  Mark advances are the font's, as HarfBuzz's Indic shaper
 leaves them.  Clusters are HarfBuzz's level 0.
 
 The per-script differences are HarfBuzz's configurations: the reph
-goes before the post-base forms in Devanagari, after the subjoined
-ones in Bengali and after the post-base forms in Tamil and Telugu;
-Telugu forms a reph only from Ra, Halant, ZWJ and applies `blwf` to
-consonants after the base alone; a Tamil pre-base matra goes right
-before the base, there being no half forms to pass.
+goes before the post-base forms in Devanagari and Gujarati, after the
+subjoined ones in Bengali and after the post-base forms in Tamil and
+Telugu; Telugu forms a reph only from Ra, Halant, ZWJ and applies
+`blwf` to consonants after the base alone; a Tamil pre-base matra
+goes right before the base, there being no half forms to pass.
+Gujarati is Devanagari's configuration with its own virama and matra
+positions.
 
 Text in any other script gets the default shaper: the common features
 with no reordering, mark advances zeroed by GDEF class.  Normalization
-covers the four blocks: the split vowels (Bengali o and au, Tamil o,
+covers the five blocks: the split vowels (Bengali o and au, Tamil o,
 oo and au, Telugu ai) and nukta forms HarfBuzz decomposes, the
 consonant-nukta pairs it recomposes when the font has the glyph, and
 the canonical order of marks by combining class (the nuktas, the
-viramas, the Telugu length marks).
+viramas, the Telugu length marks); Gujarati has nothing to decompose.
 
 Not yet: Unicode beyond the BMP (zpb-ttf reads the format 4 cmap),
 cursive attachment, right-to-left runs, dotted circles for broken
 syllables and HarfBuzz's vowel-sequence constraints, the old-spec
-behaviours of a font that has only an old script tag (`deva`, `taml`
+behaviors of a font that has only an old script tag (`deva`, `taml`
 and the like; such a font is shaped by the new-spec rules), the other
 Indic scripts.  Their tables are the same shape; the categories and
 configurations are what is missing.
@@ -85,8 +88,8 @@ configurations are what is missing.
 - `(akshara:load-font path)`, `(akshara:close-font font)`,
   `(akshara:with-font (var path) ...)`.  A font keeps its file open.
 - `(akshara:shape font string &key script language)` — `script` is
-  `:devanagari`, `:bengali`, `:tamil`, `:telugu`, `nil` for the
-  default shaper, or `:guess` (the default) from the first character
+  `:devanagari`, `:bengali`, `:tamil`, `:telugu`, `:gujarati`, `nil`
+  for the default shaper, or `:guess` (the default) from the first character
   in one of those blocks; `language` an OpenType language tag such as
   `"SAN "`.  Returns a vector of `shaped-glyph`
   (`sg-gid`, `sg-cluster`, `sg-x-advance`, `sg-y-advance`,
@@ -151,16 +154,23 @@ maha-mantra and the names, Bhagavad-gita and Siksastaka verses in
 each script, Annamacharya's kirtanas and Andal's Tiruppavai, prose
 about the movement, and lines that run through every vowel sign, the
 conjuncts with Ra first and second, the joiners, the Grantha letters,
-digits and punctuation); and what HarfBuzz 10.2 made of each line
-with the font files in `fonts/` (`make-golden.sh` regenerates them
-with `hb-shape`).  A line passes when akshara's glyph ids, clusters,
-advances and offsets are all the same.  All 776 pass.
+digits and punctuation); 172 lines of Gujarati of the same kind (the
+names, Gita and Siksastaka verses in Gujarati script, Narasinha
+Mehta's Vaishnava jana, prose about the movement and about Gujarat's
+Krishna tirthas, and lines that run through every vowel sign, the
+conjuncts with Ra first and second, the reph on each matra, the
+nukta, the joiners, digits and punctuation); and what HarfBuzz 10.2
+made of each line with the font files in `fonts/` (`make-golden.sh`
+regenerates them with `hb-shape`).  A line passes when akshara's
+glyph ids, clusters, advances and offsets are all the same.  All
+948 pass.
 
 The fonts are Noto Serif Devanagari SemiBold 2.006, Noto Serif
-Bengali SemiBold 3.000, Noto Serif Telugu 2.001 and Noto Serif Tamil
-2.001 (Regular and Bold; the goldens use the Regular cuts, and the
-Bold cuts shape the same corpora identically to hb-shape), under the
-SIL Open Font License (`fonts/OFL-*`).
+Bengali SemiBold 3.000, Noto Serif Telugu 2.001, Noto Serif Tamil
+2.001 and Noto Serif Gujarati 2.002 (Regular and Bold; the goldens
+use the Regular cuts, and the Bold cuts shape the same corpora
+identically to hb-shape), under the SIL Open Font License
+(`fonts/OFL-*`).
 
 ## Layout of the source
 

@@ -10,10 +10,16 @@
 # verses in each script, Annamacharya's kirtanas and Andal's
 # Tiruppavai, prose about the movement, and lines that exercise every
 # vowel sign, the conjuncts (Ra first and second), the joiners, the
-# Grantha letters, digits and punctuation.  hb-shape shapes each line
-# with the same font files the library reads and writes one result per
-# line, in its text format with glyph ids (--no-glyph-names), to
-# <script>-hb.txt.  The tests pin akshara's output to those files.
+# Grantha letters, digits and punctuation.  gujr-lines.txt (172 lines,
+# 2026-10-15) is the same kind of corpus in Gujarati: the names, Gita
+# and Siksastaka verses in Gujarati script, Narasinha Mehta's Vaishnava
+# jana, prose about the movement and Gujarat's Krishna tirthas, and
+# lines that run through every vowel sign, the conjuncts with Ra first
+# and second, the reph on each matra, the nukta, the joiners, digits
+# and punctuation.  hb-shape shapes each line with the same font files the
+# library reads and writes one result per line, in its text format
+# with glyph ids (--no-glyph-names), to <script>-hb.txt.  The tests pin
+# akshara's output to those files.
 #
 # Needs hb-shape (Debian: libharfbuzz-bin) and a UTF-8 locale.  Run
 # from anywhere; paths are relative to this script.
@@ -36,6 +42,10 @@ hb-shape --font-file ../../fonts/NotoSerifTelugu-Regular.ttf \
 hb-shape --font-file ../../fonts/NotoSerifTamil-Regular.ttf \
          --text-file taml-lines.txt --no-glyph-names \
          --output-file taml-hb.txt
+hb-shape --font-file ../../fonts/NotoSerifGujarati-Regular.ttf \
+         --text-file gujr-lines.txt --no-glyph-names \
+         --output-file gujr-hb.txt
 
 wc -l deva-lines.txt deva-hb.txt beng-lines.txt beng-hb.txt \
-      telu-lines.txt telu-hb.txt taml-lines.txt taml-hb.txt
+      telu-lines.txt telu-hb.txt taml-lines.txt taml-hb.txt \
+      gujr-lines.txt gujr-hb.txt

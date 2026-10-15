@@ -2,7 +2,7 @@
 ;; SPDX-License-Identifier: MIT
 
 (defsystem "akshara"
-  :description "OpenType shaping: GSUB and GPOS through zpb-ttf, an Indic shaper for Devanagari, Bengali, Tamil and Telugu."
+  :description "OpenType shaping: GSUB and GPOS through zpb-ttf, an Indic shaper for Devanagari, Bengali, Tamil, Telugu and Gujarati."
   :author "David Cooper"
   :license "MIT"
   :version "0.1.0"

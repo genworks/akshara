@@ -38,6 +38,7 @@ shaper's own.")
     (:bengali '("bng2" "beng"))
     (:tamil '("tml2" "taml"))
     (:telugu '("tel2" "telu"))
+    (:gujarati '("gjr2" "gujr"))
     ((nil) '("DFLT" "dflt" "latn"))))
 
 (defun collect-stage (lt langsys features masks &key per-syllable (auto-joiners t))
@@ -129,6 +130,7 @@ shaper covers, or NIL."
         for code = (char-code ch)
         do (cond ((<= #x0900 code #x097F) (return :devanagari))
                  ((<= #x0980 code #x09FF) (return :bengali))
+                 ((<= #x0A80 code #x0AFF) (return :gujarati))
                  ((<= #x0B80 code #x0BFF) (return :tamil))
                  ((<= #x0C00 code #x0C7F) (return :telugu)))
         finally (return nil)))
@@ -256,8 +258,9 @@ other default-ignorable characters no lookup consumed take no space."
 (defun shape (font string &key (script :guess) language)
   "Shape STRING with FONT: a vector of shaped-glyph, in visual order,
 advances and offsets in font units.  SCRIPT is :devanagari, :bengali,
-:tamil, :telugu, NIL for the default shaper, or :guess (from the
-text).  LANGUAGE is an OpenType language tag such as \"SAN \"."
+:tamil, :telugu, :gujarati, NIL for the default shaper, or :guess
+\(from the text).  LANGUAGE is an OpenType language tag such as
+\"SAN \"."
   (let* ((script (if (eq script :guess) (guess-script string) script))
          (plan (make-plan font script language))
          (buf (make-buffer (max 16 (length string)))))

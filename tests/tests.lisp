@@ -27,7 +27,8 @@
   '((:devanagari "deva" "NotoSerifDevanagari-SemiBold.ttf")
     (:bengali "beng" "NotoSerifBengali-SemiBold.ttf")
     (:telugu "telu" "NotoSerifTelugu-Regular.ttf")
-    (:tamil "taml" "NotoSerifTamil-Regular.ttf")))
+    (:tamil "taml" "NotoSerifTamil-Regular.ttf")
+    (:gujarati "gujr" "NotoSerifGujarati-Regular.ttf")))
 
 (defun read-lines (path)
   (with-open-file (in path :external-format :utf-8)

@@ -22,10 +22,12 @@
   (list (%make-indic-config :script :devanagari :virama #x094D :reph-pos :before-post :reph-mode :implicit :blwf-mode :pre-and-post)
         (%make-indic-config :script :bengali :virama #x09CD :reph-pos :after-sub :reph-mode :implicit :blwf-mode :pre-and-post)
         (%make-indic-config :script :tamil :virama #x0BCD :reph-pos :after-post :reph-mode :implicit :blwf-mode :pre-and-post)
-        (%make-indic-config :script :telugu :virama #x0C4D :reph-pos :after-post :reph-mode :explicit :blwf-mode :post-only))
+        (%make-indic-config :script :telugu :virama #x0C4D :reph-pos :after-post :reph-mode :explicit :blwf-mode :post-only)
+        (%make-indic-config :script :gujarati :virama #x0ACD :reph-pos :before-post :reph-mode :implicit :blwf-mode :pre-and-post))
   "HarfBuzz's indic_configs for the scripts covered.  Telugu forms a
 reph only from Ra, Halant, ZWJ and applies 'blwf' after the base
-alone; Tamil and Telugu put the reph after the post-base forms.")
+alone; Tamil and Telugu put the reph after the post-base forms;
+Gujarati is configured as Devanagari, with its own virama.")
 
 (defun indic-config (script)
   (find script *indic-configs* :key #'indic-config-script))
@@ -36,7 +38,7 @@ alone; Tamil and Telugu put the reph after the post-base forms.")
 
 (defstruct (plan (:constructor %make-plan))
   font
-  script                                ; :devanagari :bengali :tamil :telugu or NIL (the default shaper)
+  script                                ; :devanagari :bengali :tamil :telugu :gujarati or NIL (the default shaper)
   config                                ; indic-config or NIL
   gsub-langsys
   gpos-langsys
